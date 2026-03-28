@@ -1,0 +1,10 @@
+/home/alex/Desktop/Tarea-Embebidos/Proyecto_1_Embebidos/detector_ojos/target/debug/build/opencv-20933b4060fe668e/build_script_build-20933b4060fe668e.d: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/binding-generator.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/cmake_probe.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/docs.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/generator.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/library.rs
+
+/home/alex/Desktop/Tarea-Embebidos/Proyecto_1_Embebidos/detector_ojos/target/debug/build/opencv-20933b4060fe668e/build_script_build-20933b4060fe668e: /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/binding-generator.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/cmake_probe.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/docs.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/generator.rs /home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/library.rs
+
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build.rs:
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/binding-generator.rs:
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/cmake_probe.rs:
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/docs.rs:
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/generator.rs:
+/home/alex/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/opencv-0.92.3/build/library.rs:
