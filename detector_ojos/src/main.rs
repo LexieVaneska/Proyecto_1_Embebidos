@@ -29,6 +29,12 @@ const FACE_CASCADE_PATH: &str = "/usr/share/opencv4/haarcascades/haarcascade_fro
 // ruta del modelo preentrenado de FacemarkLBF
 const FACEMARK_MODEL_PATH: &str = "models/lbfmodel.yaml";
 
+// índices de landmarks para el ojo izquierdo en un modelo facial de 68 puntos
+const LEFT_EYE_INDICES: [usize; 6] = [36, 37, 38, 39, 40, 41];
+
+// índices de landmarks para el ojo derecho en un modelo facial de 68 puntos
+const RIGHT_EYE_INDICES: [usize; 6] = [42, 43, 44, 45, 46, 47];
+
 fn main() -> opencv::Result<()> { // función principal
     // se crea la carpeta de salida si todavía no existe
 
@@ -255,6 +261,9 @@ fn process_frame(
         // si el modelo logró ajustar puntos faciales, los dibujamos sobre la imagen
         if landmarks_found && !landmarks.is_empty() {
             draw_landmarks(&mut output_frame, &landmarks)?;
+
+            // además de dibujar todos los puntos, obtenemos las cajas de ambos ojos
+            draw_eye_boxes_from_landmarks(&mut output_frame, &landmarks)?;
         }
     }
 
@@ -314,5 +323,73 @@ fn draw_landmarks(frame: &mut Mat, landmarks: &Vector<Vector<Point2f>>) -> openc
     for facial_points in landmarks.iter() {
         face::draw_facemarks(frame, &facial_points, Scalar::new(0.0, 0.0, 255.0, 0.0))?;
     }
+    Ok(())
+}
+
+fn draw_eye_boxes_from_landmarks(
+    frame: &mut Mat,
+    landmarks: &Vector<Vector<Point2f>>,
+) -> opencv::Result<()> {
+    // recorremos los landmarks de cada rostro detectado
+    for facial_points in landmarks.iter() {
+        if facial_points.len() < 48 {
+            continue;
+        }
+
+        if let Some(left_eye_box) = build_eye_box_from_indices(&facial_points, &LEFT_EYE_INDICES) {
+            draw_eye_bounding_box(frame, left_eye_box)?;
+        }
+
+        if let Some(right_eye_box) = build_eye_box_from_indices(&facial_points, &RIGHT_EYE_INDICES) {
+            draw_eye_bounding_box(frame, right_eye_box)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn build_eye_box_from_indices(
+    facial_points: &Vector<Point2f>,
+    eye_indices: &[usize],
+) -> Option<Rect> {
+    // iniciamos límites extremos para calcular el rectángulo mínimo que contiene el ojo
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+
+    // recorremos únicamente los puntos que pertenecen al ojo
+    for &index in eye_indices {
+        let point = facial_points.get(index).ok()?;
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+
+    // agregamos un pequeño margen para que la caja no quede pegada al párpado
+    let eye_width = max_x - min_x;
+    let eye_height = max_y - min_y;
+    let horizontal_padding = (eye_width * 0.25).max(4.0);
+    let vertical_padding = (eye_height * 0.8).max(4.0);
+
+    let x = (min_x - horizontal_padding).max(0.0).round() as i32;
+    let y = (min_y - vertical_padding).max(0.0).round() as i32;
+    let width = (eye_width + (horizontal_padding * 2.0)).round() as i32;
+    let height = (eye_height + (vertical_padding * 2.0)).round() as i32;
+
+    Some(Rect::new(x, y, width.max(1), height.max(1)))
+}
+
+fn draw_eye_bounding_box(frame: &mut Mat, eye: Rect) -> opencv::Result<()> {
+    // azul para las cajas de los ojos
+    imgproc::rectangle(
+        frame,
+        eye,
+        Scalar::new(255.0, 0.0, 0.0, 0.0),
+        2,
+        imgproc::LINE_8,
+        0,
+    )?;
     Ok(())
 }
