@@ -20,3 +20,4 @@ detector_ojos/videos_salida/*.mkv
 # Mantener las carpetas versionadas aunque esten vacias
 !detector_ojos/videos/.gitkeep
 !detector_ojos/videos_salida/.gitkeep
+.codex

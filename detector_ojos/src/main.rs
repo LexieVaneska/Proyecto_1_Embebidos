@@ -2,7 +2,8 @@ use std::fs; //crear carpetas y manejar archivos
 use std::path::Path;
 
 use opencv::{ 
-    core::{Mat, Point, Rect, Scalar, Size, Vector}, //Mat para imágenes, Point para el centro, Rect para bounding boxes, Scalar para colores, Size para dimensiones
+    core::{Mat, Point, Point2f, Rect, Scalar, Size, Vector}, //Mat para imágenes, Point para el centro, Point2f para landmarks, Rect para bounding boxes, Scalar para colores, Size para dimensiones
+    face, //face para usar FacemarkLBF y dibujar landmarks
     highgui, //highgui para mostrar ventanas y manejar eventos de teclado
     imgproc, //imgproc para convertir a gris y dibujar rectángulos
     objdetect, //objdetect para usar los clasificadores Haar Cascade
@@ -25,6 +26,9 @@ const WINDOW_NAME: &str = "Vista previa del video";
 // ruta del clasificador que detecta rostros frontales
 const FACE_CASCADE_PATH: &str = "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml";
 
+// ruta del modelo preentrenado de FacemarkLBF
+const FACEMARK_MODEL_PATH: &str = "models/lbfmodel.yaml";
+
 fn main() -> opencv::Result<()> { // función principal
     // se crea la carpeta de salida si todavía no existe
 
@@ -41,6 +45,7 @@ fn main() -> opencv::Result<()> { // función principal
 
     // se cargan los detectores una sola vez al inicio para no hacerlo en cada frame
     let mut face_detector = load_cascade_classifier(FACE_CASCADE_PATH)?;
+    let mut facemark = load_facemark_model(FACEMARK_MODEL_PATH)?;
 
     // se calcula el retraso entre frames usando el FPS real del video
     let frame_delay = calculate_frame_delay(fps);
@@ -75,8 +80,9 @@ fn main() -> opencv::Result<()> { // función principal
         // etapa de procesamiento:
         // 1. detectar varios candidatos de rostro
         // 2. escoger solo el mejor rostro
-        // 3. dibujar una sola bounding box verde
-        let processed_frame = process_frame(&frame, &mut face_detector)?;
+        // 3. usar FacemarkLBF para obtener landmarks del rostro
+        // 4. dibujar el rostro y los puntos faciales sobre la imagen
+        let processed_frame = process_frame(&frame, &mut face_detector, &mut facemark)?;
 
         // muestra el frame procesado en la ventana creada al inicio del programa
         highgui::imshow(WINDOW_NAME, &processed_frame)?;
@@ -152,6 +158,26 @@ fn load_cascade_classifier(cascade_path: &str) -> opencv::Result<objdetect::Casc
     Ok(classifier)
 }
 
+fn load_facemark_model(
+    model_path: &str,
+) -> opencv::Result<opencv::core::Ptr<face::FacemarkLBF>> {
+    // revisa si el archivo del modelo existe antes de intentar cargarlo
+    if !Path::new(model_path).exists() {
+        return Err(opencv::Error::new(
+            0,
+            format!("No se encontró el modelo de Facemark en '{}'", model_path),
+        ));
+    }
+
+    // crea una instancia del detector de landmarks con parámetros por defecto
+    let mut facemark = face::FacemarkLBF::create_def()?;
+
+    // carga el modelo entrenado desde disco
+    facemark.load_model(model_path)?;
+
+    Ok(facemark)
+}
+
 fn calculate_frame_delay(fps: f64) -> i32 {
     // convierte FPS a milisegundos por frame para que la vista previa se vea a velocidad parecida al video real
     if fps > 0.0 {
@@ -188,6 +214,7 @@ fn create_output_writer( //función que construye el escritor del vídeo de sali
 fn process_frame(
     frame: &Mat,
     face_detector: &mut objdetect::CascadeClassifier,
+    facemark: &mut opencv::core::Ptr<face::FacemarkLBF>,
 ) -> opencv::Result<Mat> { //función que procesa cada frame
     // crea un frame de salida para dibujar sobre él sin alterar el frame original
     let mut output_frame = Mat::default();
@@ -216,6 +243,19 @@ fn process_frame(
     // se escoge un único rostro, dando preferencia a un rostro grande y cercano al centro
     if let Some(face) = select_primary_face(&faces, frame.size()?) {
         draw_face_bounding_box(&mut output_frame, face)?;
+
+        // colocamos el rostro en un vector porque Facemark::fit espera una lista de caras
+        let mut selected_faces = Vector::<Rect>::new();
+        selected_faces.push(face);
+
+        // aquí se guardarán los landmarks detectados para cada rostro
+        let mut landmarks = Vector::<Vector<Point2f>>::new();
+        let landmarks_found = facemark.fit(frame, &selected_faces, &mut landmarks)?;
+
+        // si el modelo logró ajustar puntos faciales, los dibujamos sobre la imagen
+        if landmarks_found && !landmarks.is_empty() {
+            draw_landmarks(&mut output_frame, &landmarks)?;
+        }
     }
 
     Ok(output_frame)
@@ -266,5 +306,13 @@ fn draw_face_bounding_box(frame: &mut Mat, face: Rect) -> opencv::Result<()> {
         imgproc::LINE_8,
         0,
     )?;
+    Ok(())
+}
+
+fn draw_landmarks(frame: &mut Mat, landmarks: &Vector<Vector<Point2f>>) -> opencv::Result<()> {
+    // dibuja todos los puntos faciales detectados para cada rostro
+    for facial_points in landmarks.iter() {
+        face::draw_facemarks(frame, &facial_points, Scalar::new(0.0, 0.0, 255.0, 0.0))?;
+    }
     Ok(())
 }
