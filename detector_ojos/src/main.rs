@@ -21,8 +21,9 @@ const OUTPUT_DIRECTORY: &str = "videos_salida";
 // nombre del archivo de salida
 const OUTPUT_VIDEO_PATH: &str = "videos_salida/video_procesado.mp4";
 
-// nombre de la ventana donde se mostrará el video mientras se procesa
-const WINDOW_NAME: &str = "Vista previa del video";
+// nombres de las ventanas para vista original y procesada
+const ORIGINAL_WINDOW_NAME: &str = "Video original";
+const PROCESSED_WINDOW_NAME: &str = "Video procesado";
 
 // ruta del clasificador que detecta rostros frontales
 const FACE_CASCADE_PATH: &str = "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml";
@@ -79,9 +80,11 @@ fn main() -> opencv::Result<()> { // función principal
     // se calcula el retraso entre frames usando el FPS real del video
     let frame_delay = calculate_frame_delay(fps);
 
-    // Creamos la ventana donde se mostrará el video mientras se procesa
-    highgui::named_window(WINDOW_NAME, highgui::WINDOW_NORMAL)?;
-    highgui::resize_window(WINDOW_NAME, 960, 540)?;
+    // Creamos ventanas separadas para el video original y el procesado
+    highgui::named_window(ORIGINAL_WINDOW_NAME, highgui::WINDOW_NORMAL)?;
+    highgui::resize_window(ORIGINAL_WINDOW_NAME, 960, 540)?;
+    highgui::named_window(PROCESSED_WINDOW_NAME, highgui::WINDOW_NORMAL)?;
+    highgui::resize_window(PROCESSED_WINDOW_NAME, 960, 540)?;
 
     // se muestra por consola los datos principales del video
     println!("Video de entrada: {}", INPUT_VIDEO_PATH);
@@ -116,8 +119,9 @@ fn main() -> opencv::Result<()> { // función principal
         update_ear_history(&mut ear_history, processing_result.average_ear);
         draw_ear_graph(&mut processing_result.frame, &ear_history)?;
 
-        // muestra el frame procesado en la ventana creada al inicio del programa
-        highgui::imshow(WINDOW_NAME, &processing_result.frame)?;
+        // muestra el frame original y el procesado en ventanas separadas
+        highgui::imshow(ORIGINAL_WINDOW_NAME, &frame)?;
+        highgui::imshow(PROCESSED_WINDOW_NAME, &processing_result.frame)?;
 
         // guarda el frame dentro del vídeo de salida
         writer.write(&processing_result.frame)?;
@@ -380,16 +384,62 @@ fn draw_eye_boxes_and_labels_from_landmarks(
             continue;
         }
 
+        let mut left_eye_detection = None;
+        let mut right_eye_detection = None;
+
         if let Some(left_eye_box) = build_eye_box_from_indices(&facial_points, &LEFT_EYE_INDICES) {
-            draw_eye_bounding_box(frame, left_eye_box)?;
             let left_eye_ear = compute_eye_aspect_ratio(&facial_points, &LEFT_EYE_INDICES);
             detected_ears.push(left_eye_ear);
             let left_eye_analysis_box =
                 build_eye_analysis_box_from_corners(&facial_points, &LEFT_EYE_INDICES);
             let left_eye_visual_metrics =
                 compute_eye_visual_metrics(gray_frame, left_eye_analysis_box)?;
-            let left_eye_status =
-                get_eye_status_label(left_eye_ear, left_eye_visual_metrics, "Ojo izquierdo");
+            let left_eye_is_closed = is_eye_closed(left_eye_ear, left_eye_visual_metrics);
+            let left_eye_status = get_eye_status_label(
+                left_eye_is_closed,
+                "Ojo izquierdo",
+            );
+            left_eye_detection = Some((
+                left_eye_box,
+                left_eye_status,
+                left_eye_ear,
+                left_eye_visual_metrics,
+                left_eye_is_closed,
+            ));
+        }
+
+        if let Some(right_eye_box) = build_eye_box_from_indices(&facial_points, &RIGHT_EYE_INDICES) {
+            let right_eye_ear = compute_eye_aspect_ratio(&facial_points, &RIGHT_EYE_INDICES);
+            detected_ears.push(right_eye_ear);
+            let right_eye_analysis_box =
+                build_eye_analysis_box_from_corners(&facial_points, &RIGHT_EYE_INDICES);
+            let right_eye_visual_metrics =
+                compute_eye_visual_metrics(gray_frame, right_eye_analysis_box)?;
+            let right_eye_is_closed = is_eye_closed(right_eye_ear, right_eye_visual_metrics);
+            let right_eye_status = get_eye_status_label(
+                right_eye_is_closed,
+                "Ojo derecho",
+            );
+            right_eye_detection = Some((
+                right_eye_box,
+                right_eye_status,
+                right_eye_ear,
+                right_eye_visual_metrics,
+                right_eye_is_closed,
+            ));
+        }
+
+        if let (Some(left_eye), Some(right_eye)) = (&left_eye_detection, &right_eye_detection) {
+            if left_eye.4 && right_eye.4 {
+                draw_closed_eye_fill(frame, left_eye.0)?;
+                draw_closed_eye_fill(frame, right_eye.0)?;
+            }
+        }
+
+        if let Some((left_eye_box, left_eye_status, left_eye_ear, left_eye_visual_metrics, _)) =
+            left_eye_detection
+        {
+            draw_eye_bounding_box(frame, left_eye_box)?;
             draw_eye_status_label(
                 frame,
                 left_eye_box,
@@ -399,16 +449,15 @@ fn draw_eye_boxes_and_labels_from_landmarks(
             )?;
         }
 
-        if let Some(right_eye_box) = build_eye_box_from_indices(&facial_points, &RIGHT_EYE_INDICES) {
+        if let Some((
+            right_eye_box,
+            right_eye_status,
+            right_eye_ear,
+            right_eye_visual_metrics,
+            _,
+        )) = right_eye_detection
+        {
             draw_eye_bounding_box(frame, right_eye_box)?;
-            let right_eye_ear = compute_eye_aspect_ratio(&facial_points, &RIGHT_EYE_INDICES);
-            detected_ears.push(right_eye_ear);
-            let right_eye_analysis_box =
-                build_eye_analysis_box_from_corners(&facial_points, &RIGHT_EYE_INDICES);
-            let right_eye_visual_metrics =
-                compute_eye_visual_metrics(gray_frame, right_eye_analysis_box)?;
-            let right_eye_status =
-                get_eye_status_label(right_eye_ear, right_eye_visual_metrics, "Ojo derecho");
             draw_eye_status_label(
                 frame,
                 right_eye_box,
@@ -600,6 +649,18 @@ fn draw_eye_bounding_box(frame: &mut Mat, eye: Rect) -> opencv::Result<()> {
     Ok(())
 }
 
+fn draw_closed_eye_fill(frame: &mut Mat, eye: Rect) -> opencv::Result<()> {
+    imgproc::rectangle(
+        frame,
+        eye,
+        Scalar::new(0.0, 0.0, 0.0, 0.0),
+        -1,
+        imgproc::LINE_8,
+        0,
+    )?;
+    Ok(())
+}
+
 fn build_eye_analysis_box_from_corners(
     facial_points: &Vector<Point2f>,
     eye_indices: &[usize; 6],
@@ -625,11 +686,10 @@ fn build_eye_analysis_box_from_corners(
     )
 }
 
-fn get_eye_status_label(
+fn is_eye_closed(
     eye_aspect_ratio: f32,
     visual_metrics: EyeVisualMetrics,
-    eye_name: &str,
-) -> String {
+) -> bool {
     let is_closed_by_ear = eye_aspect_ratio <= EYE_CLOSED_EAR_THRESHOLD;
     let is_closed_by_visual = visual_metrics.span_ratio <= VISUAL_CLOSED_SPAN_RATIO_THRESHOLD
         && visual_metrics.dark_ratio <= VISUAL_CLOSED_DARK_RATIO_THRESHOLD;
@@ -637,7 +697,14 @@ fn get_eye_status_label(
     let is_closed_by_hybrid = eye_aspect_ratio <= HYBRID_EAR_SOFT_THRESHOLD
         && (is_closed_by_visual || has_eyelid_line);
 
-    if is_closed_by_ear || is_closed_by_hybrid {
+    is_closed_by_ear || is_closed_by_hybrid
+}
+
+fn get_eye_status_label(
+    is_closed: bool,
+    eye_name: &str,
+) -> String {
+    if is_closed {
         format!("{eye_name} cerrado")
     } else {
         format!("{eye_name} abierto")
@@ -822,7 +889,13 @@ fn draw_eye_status_label(
     ear: f32,
     visual_metrics: EyeVisualMetrics,
 ) -> opencv::Result<()> {
-    let text_origin_y = if eye.y > 12 { eye.y - 8 } else { eye.y + eye.height + 20 };
+    let frame_height = frame.size()?.height;
+    let preferred_text_origin_y = eye.y - 52;
+    let text_origin_y = if preferred_text_origin_y >= 18 {
+        preferred_text_origin_y
+    } else {
+        (eye.y + eye.height + 20).min(frame_height.saturating_sub(40))
+    };
     let text_origin = Point::new(eye.x, text_origin_y);
     let ear_text = format!("EAR: {:.3}", ear);
     let visual_text = format!(
