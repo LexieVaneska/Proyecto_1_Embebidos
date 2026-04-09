@@ -1,9 +1,11 @@
+//Se importan las piezas que usará OpenCV
 use opencv::{
     core::{self, Point, Point2f, Rect, Size, Vec4i, Vector},
     imgproc,
     prelude::*,
 };
 
+//Importa las constantes de configuración para análisis de ojos
 use crate::config::{
     EYE_ANALYSIS_HEIGHT_FACTOR, EYE_ANALYSIS_WIDTH_FACTOR, EYE_BOX_HORIZONTAL_PADDING_FACTOR,
     EYE_BOX_VERTICAL_PADDING_FACTOR, EYE_CLOSED_EAR_THRESHOLD, EYELID_LINE_MAX_VERTICAL_DRIFT,
@@ -13,12 +15,14 @@ use crate::config::{
 };
 
 #[derive(Clone, Copy)]
+//Guarda métricas visuales del ojo para ayudar a decidir si está abierto o cerrado
 pub struct EyeVisualMetrics {
     pub span_ratio: f32,
     pub dark_ratio: f32,
     pub eyelid_line_ratio: f32,
 }
 
+//Escoge el rostro principal según tamaño y cercanía al centro del frame
 pub fn select_primary_face(faces: &Vector<Rect>, frame_size: Size) -> Option<Rect> {
     if faces.is_empty() {
         return None;
@@ -47,6 +51,7 @@ pub fn select_primary_face(faces: &Vector<Rect>, frame_size: Size) -> Option<Rec
     best_face
 }
 
+//Construye una caja alrededor del ojo usando los landmarks y un margen extra
 pub fn build_eye_box_from_indices(
     facial_points: &Vector<Point2f>,
     eye_indices: &[usize],
@@ -79,6 +84,7 @@ pub fn build_eye_box_from_indices(
     Some(Rect::new(x, y, width.max(1), height.max(1)))
 }
 
+//Construye una región centrada en el ojo para hacer el análisis visual
 pub fn build_eye_analysis_box_from_corners(
     facial_points: &Vector<Point2f>,
     eye_indices: &[usize; 6],
@@ -104,6 +110,7 @@ pub fn build_eye_analysis_box_from_corners(
     )
 }
 
+//Decide si el ojo está cerrado combinando EAR con métricas visuales
 pub fn is_eye_closed(eye_aspect_ratio: f32, visual_metrics: EyeVisualMetrics) -> bool {
     let is_closed_by_ear = eye_aspect_ratio <= EYE_CLOSED_EAR_THRESHOLD;
     let is_closed_by_visual = visual_metrics.span_ratio <= VISUAL_CLOSED_SPAN_RATIO_THRESHOLD
@@ -115,6 +122,7 @@ pub fn is_eye_closed(eye_aspect_ratio: f32, visual_metrics: EyeVisualMetrics) ->
     is_closed_by_ear || is_closed_by_hybrid
 }
 
+//Genera el texto que aparecerá sobre cada ojo
 pub fn get_eye_status_label(is_closed: bool, eye_name: &str) -> String {
     if is_closed {
         format!("{eye_name} cerrado")
@@ -123,6 +131,7 @@ pub fn get_eye_status_label(is_closed: bool, eye_name: &str) -> String {
     }
 }
 
+//Calcula el Eye Aspect Ratio usando 6 puntos del ojo
 pub fn compute_eye_aspect_ratio(
     facial_points: &Vector<Point2f>,
     eye_indices: &[usize; 6],
@@ -147,7 +156,9 @@ pub fn compute_eye_aspect_ratio(
     (vertical_distance_1 + vertical_distance_2) / (2.0 * horizontal_distance)
 }
 
+//Analiza visualmente la región del ojo para medir apertura, oscuridad y línea del párpado
 pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Result<EyeVisualMetrics> {
+    //Ajusta la caja del ojo para que no se salga de los límites del frame
     let clipped_eye_box = clamp_rect_to_frame(eye_box, gray_frame.size()?);
     if clipped_eye_box.width <= 1 || clipped_eye_box.height <= 1 {
         return Ok(EyeVisualMetrics {
@@ -157,8 +168,10 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
         });
     }
 
+    //Se enfoca en una parte central del ojo para evitar ruido alrededor
     let focus_box = build_visual_focus_box(clipped_eye_box);
     let eye_roi = gray_frame.roi(focus_box)?;
+    //Aplica un desenfoque suave para estabilizar el análisis
     let mut blurred_roi = Mat::default();
     imgproc::gaussian_blur(
         &eye_roi,
@@ -169,6 +182,7 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
         core::BORDER_DEFAULT,
     )?;
 
+    //Calcula brillo promedio y variación para sacar un umbral adaptativo
     let mut mean = Mat::default();
     let mut stddev = Mat::default();
     core::mean_std_dev(&blurred_roi, &mut mean, &mut stddev, &Mat::default())?;
@@ -176,6 +190,7 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
     let stddev_intensity = *stddev.at_2d::<f64>(0, 0)?;
     let adaptive_threshold = (mean_intensity - (stddev_intensity * 0.35)).clamp(25.0, 105.0);
 
+    //Convierte la región en una máscara donde lo oscuro queda resaltado
     let mut dark_mask = Mat::default();
     imgproc::threshold(
         &blurred_roi,
@@ -185,12 +200,14 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
         imgproc::THRESH_BINARY_INV,
     )?;
 
+    //Define cuántos píxeles oscuros necesita una fila para ser considerada relevante
     let row_activation_threshold = (f64::from(focus_box.width) * VISUAL_DARK_ROW_MIN_RATIO)
         .ceil()
         .max(1.0) as i32;
     let mut first_active_row = None;
     let mut last_active_row = None;
 
+    //Busca desde qué fila hasta cuál fila aparece información oscura útil
     for row in 0..focus_box.height {
         let row_roi = dark_mask.roi(Rect::new(0, row, focus_box.width, 1))?;
         let active_pixels = core::count_non_zero(&row_roi)?;
@@ -203,6 +220,7 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
         }
     }
 
+    //Mide qué tanto ocupa verticalmente la zona activa del ojo
     let span_ratio = if let (Some(first_row), Some(last_row)) = (first_active_row, last_active_row)
     {
         let active_span = (last_row - first_row + 1) as f32;
@@ -211,9 +229,11 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
         1.0
     };
 
+    //Calcula cuánta oscuridad total hay en la región analizada
     let active_pixels = core::count_non_zero(&dark_mask)? as f32;
     let total_pixels = (focus_box.width * focus_box.height).max(1) as f32;
     let dark_ratio = active_pixels / total_pixels;
+    //Busca una línea horizontal que pueda corresponder al párpado
     let eyelid_line_ratio =
         compute_eyelid_line_ratio(&dark_mask, focus_box.width, focus_box.height)?;
 
@@ -224,16 +244,20 @@ pub fn compute_eye_visual_metrics(gray_frame: &Mat, eye_box: Rect) -> opencv::Re
     })
 }
 
+//Calcula la distancia euclidiana entre dos puntos
 fn euclidean_distance(point_a: Point2f, point_b: Point2f) -> f32 {
     let delta_x = point_a.x - point_b.x;
     let delta_y = point_a.y - point_b.y;
     (delta_x * delta_x + delta_y * delta_y).sqrt()
 }
 
+//Mide qué tan marcada es una línea horizontal dentro de la máscara del ojo
 fn compute_eyelid_line_ratio(mask: &Mat, width: i32, height: i32) -> opencv::Result<f32> {
+    //Primero detecta bordes para luego buscar líneas
     let mut edges = Mat::default();
     imgproc::canny(mask, &mut edges, 50.0, 150.0, 3, false)?;
 
+    //Busca líneas rectas cortas dentro de esos bordes
     let mut lines = Vector::<Vec4i>::new();
     imgproc::hough_lines_p(
         &edges,
@@ -247,6 +271,7 @@ fn compute_eyelid_line_ratio(mask: &Mat, width: i32, height: i32) -> opencv::Res
 
     let mut best_ratio = 0.0_f32;
 
+    //Se queda con la línea más útil y más horizontal
     for line in lines.iter() {
         let dx = (line[2] - line[0]) as f32;
         let dy = (line[3] - line[1]) as f32;
@@ -266,6 +291,7 @@ fn compute_eyelid_line_ratio(mask: &Mat, width: i32, height: i32) -> opencv::Res
     Ok(best_ratio)
 }
 
+//Recorta un rectángulo para que siempre quede dentro del frame
 fn clamp_rect_to_frame(rect: Rect, frame_size: Size) -> Rect {
     let x = rect.x.clamp(0, frame_size.width.saturating_sub(1));
     let y = rect.y.clamp(0, frame_size.height.saturating_sub(1));
@@ -277,6 +303,7 @@ fn clamp_rect_to_frame(rect: Rect, frame_size: Size) -> Rect {
     Rect::new(x, y, width, height)
 }
 
+//Construye una subregión central del ojo donde el análisis visual es más confiable
 fn build_visual_focus_box(eye_box: Rect) -> Rect {
     let focus_width = ((eye_box.width as f32) * VISUAL_FOCUS_WIDTH_FACTOR).round() as i32;
     let focus_height = ((eye_box.height as f32) * VISUAL_FOCUS_HEIGHT_FACTOR).round() as i32;
