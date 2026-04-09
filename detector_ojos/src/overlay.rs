@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+//Se importan las piezas que usará OpenCV
 use opencv::{
     core::{Mat, Point, Rect, Scalar},
     face,
@@ -7,12 +8,14 @@ use opencv::{
     prelude::*,
 };
 
+//Importa las constantes de configuración
 use crate::analysis::EyeVisualMetrics;
 use crate::config::{
     EAR_GRAPH_HEIGHT, EAR_GRAPH_MARGIN, EAR_GRAPH_MAX_VALUE, EAR_GRAPH_MIN_VALUE, EAR_GRAPH_WIDTH,
     EAR_HISTORY_MAX_POINTS, EYE_CLOSED_EAR_THRESHOLD,
 };
 
+//Dibuja la caja de la cara detectada
 pub fn draw_face_bounding_box(frame: &mut Mat, face: Rect) -> opencv::Result<()> {
     imgproc::rectangle(
         frame,
@@ -25,6 +28,7 @@ pub fn draw_face_bounding_box(frame: &mut Mat, face: Rect) -> opencv::Result<()>
     Ok(())
 }
 
+//Dibuja los landmarks faciales detectados
 pub fn draw_landmarks(
     frame: &mut Mat,
     landmarks: &opencv::core::Vector<opencv::core::Vector<opencv::core::Point2f>>,
@@ -35,6 +39,7 @@ pub fn draw_landmarks(
     Ok(())
 }
 
+//Dibuja las cajas de los ojos y las etiquetas de estado (abierto/cerrado)
 pub fn draw_eye_bounding_box(frame: &mut Mat, eye: Rect) -> opencv::Result<()> {
     imgproc::rectangle(
         frame,
@@ -47,6 +52,7 @@ pub fn draw_eye_bounding_box(frame: &mut Mat, eye: Rect) -> opencv::Result<()> {
     Ok(())
 }
 
+//rellena el bounding box del ojo cuando el ojo está cerrado
 pub fn draw_closed_eye_fill(frame: &mut Mat, eye: Rect) -> opencv::Result<()> {
     imgproc::rectangle(
         frame,
@@ -66,16 +72,16 @@ pub fn draw_eye_status_label(
     ear: f32,
     visual_metrics: EyeVisualMetrics,
 ) -> opencv::Result<()> {
-    let frame_height = frame.size()?.height;
-    let preferred_text_origin_y = eye.y - 52;
-    let text_origin_y = if preferred_text_origin_y >= 18 {
+    let frame_height = frame.size()?.height; //PAra no dibujar texto fuera de la imagen
+    let preferred_text_origin_y = eye.y - 52; //Para escribir el texto arriba del ojo
+    let text_origin_y = if preferred_text_origin_y >= 18 { //Aquí decide si si lo pone
         preferred_text_origin_y
     } else {
         (eye.y + eye.height + 20).min(frame_height.saturating_sub(40))
     };
-    let text_origin = Point::new(eye.x, text_origin_y);
-    let ear_text = format!("EAR: {:.3}", ear);
-    let visual_text = format!(
+    let text_origin = Point::new(eye.x, text_origin_y); //Define el punto inicial del texto
+    let ear_text = format!("EAR: {:.3}", ear); //EScribe el texto del EAR
+    let visual_text = format!( //Escribe apertura del ojo, oscuridad del ojo y línea del párpado
         "VIS: {:.3} DARK: {:.3} LINE: {:.3}",
         visual_metrics.span_ratio, visual_metrics.dark_ratio, visual_metrics.eyelid_line_ratio
     );
@@ -122,7 +128,7 @@ pub fn draw_eye_status_label(
 }
 
 pub fn draw_visual_legend(frame: &mut Mat) -> opencv::Result<()> {
-    let legend_box = Rect::new(20, 20, 320, 125);
+    let legend_box = Rect::new(20, 20, 320, 125); //Caja de leyenda en la esquina superior izquierda
 
     imgproc::rectangle(
         frame,
@@ -154,8 +160,9 @@ pub fn draw_visual_legend(frame: &mut Mat) -> opencv::Result<()> {
     Ok(())
 }
 
+//Dibuja el gráfico de EAR histórico en la esquina inferior derecha
 pub fn draw_ear_graph(frame: &mut Mat, ear_history: &VecDeque<f32>) -> opencv::Result<()> {
-    if ear_history.is_empty() {
+    if ear_history.is_empty() { 
         return Ok(());
     }
 
@@ -203,6 +210,7 @@ pub fn draw_ear_graph(frame: &mut Mat, ear_history: &VecDeque<f32>) -> opencv::R
     Ok(())
 }
 
+//DIbuja una línea horizontal en el gráfico de EAR para indicar el umbral de ojo cerrado, y etiqueta el umbral
 fn draw_threshold_line(frame: &mut Mat, graph_rect: Rect) -> opencv::Result<()> {
     let threshold_y = map_ear_to_graph_y(EYE_CLOSED_EAR_THRESHOLD, graph_rect);
     imgproc::line(
@@ -217,6 +225,7 @@ fn draw_threshold_line(frame: &mut Mat, graph_rect: Rect) -> opencv::Result<()> 
     Ok(())
 }
 
+//Dibuja la curva del EAR
 fn draw_ear_curve(frame: &mut Mat, graph_rect: Rect, ear_history: &VecDeque<f32>) -> opencv::Result<()> {
     if ear_history.len() < 2 {
         return Ok(());
@@ -248,6 +257,7 @@ fn draw_ear_curve(frame: &mut Mat, graph_rect: Rect, ear_history: &VecDeque<f32>
     Ok(())
 }
 
+//COnvierte el valor de EAR en coordenada Y
 fn map_ear_to_graph_y(ear: f32, graph_rect: Rect) -> i32 {
     let clamped_ear = ear.clamp(EAR_GRAPH_MIN_VALUE, EAR_GRAPH_MAX_VALUE);
     let normalized = (clamped_ear - EAR_GRAPH_MIN_VALUE) / (EAR_GRAPH_MAX_VALUE - EAR_GRAPH_MIN_VALUE);
@@ -255,6 +265,7 @@ fn map_ear_to_graph_y(ear: f32, graph_rect: Rect) -> i32 {
     graph_rect.y + (inverted * (graph_rect.height - 1) as f32).round() as i32
 }
 
+//escribe texto en el gráfico de EAR
 fn draw_graph_text(frame: &mut Mat, text: &str, origin: Point) -> opencv::Result<()> {
     imgproc::put_text(
         frame,
@@ -270,6 +281,7 @@ fn draw_graph_text(frame: &mut Mat, text: &str, origin: Point) -> opencv::Result
     Ok(())
 }
 
+//DIbuja los colores detectados en la leyenda de visualización
 fn draw_legend_item(frame: &mut Mat, y: i32, color: Scalar, label: &str) -> opencv::Result<()> {
     imgproc::rectangle(
         frame,
@@ -285,6 +297,7 @@ fn draw_legend_item(frame: &mut Mat, y: i32, color: Scalar, label: &str) -> open
     Ok(())
 }
 
+//dibuja texto blanco para la leyenda de visualización
 fn draw_legend_text(frame: &mut Mat, text: &str, origin: Point) -> opencv::Result<()> {
     imgproc::put_text(
         frame,
