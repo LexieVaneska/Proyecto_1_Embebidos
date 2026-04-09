@@ -28,6 +28,9 @@ Construir una aplicacion multimedia en Rust con soporte de OpenCV e integrarla d
 ```text
 detector_ojos/
 ├── Cargo.toml
+├── docs/
+│   ├── Bitacora_BitBakers.xlsx
+│   └── Tutorial-Rust-OpenCV.pdf
 ├── models/
 │   └── lbfmodel.yaml
 ├── src/
@@ -45,6 +48,13 @@ detector_ojos/
 └── videos_salida/
     └── video_procesado.mp4
 ```
+
+## Documentacion del proyecto
+
+La carpeta `docs/` centraliza los archivos de apoyo del proyecto:
+
+- `docs/Tutorial-Rust-OpenCV.pdf`: tutorial paso a paso del flujo de sintesis, integracion y prueba.
+- `docs/Bitacora_BitBakers.xlsx`: bitacora de trabajo y seguimiento del proyecto.
 
 ## Requisitos previos
 
