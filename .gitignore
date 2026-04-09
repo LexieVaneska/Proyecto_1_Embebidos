@@ -8,11 +8,9 @@ detector_ojos/models/*.bin
 detector_ojos/models/*.dat
 
 # Videos de prueba y salidas generadas localmente
-detector_ojos/videos/*.mp4
 detector_ojos/videos/*.avi
 detector_ojos/videos/*.mov
 detector_ojos/videos/*.mkv
-detector_ojos/videos_salida/*.mp4
 detector_ojos/videos_salida/*.avi
 detector_ojos/videos_salida/*.mov
 detector_ojos/videos_salida/*.mkv

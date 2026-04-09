@@ -1,4 +1,4 @@
-pub const INPUT_VIDEO_PATH: &str = "videos/input_video4.mp4"; //Video de entrada
+pub const INPUT_VIDEO_PATH: &str = "videos/input_prueba1.mp4"; //Video de entrada
 pub const OUTPUT_DIRECTORY: &str = "videos_salida"; //CArpeta para guardar el video procesado
 pub const OUTPUT_VIDEO_PATH: &str = "videos_salida/video_procesado.mp4"; //Ruta del video final
 
