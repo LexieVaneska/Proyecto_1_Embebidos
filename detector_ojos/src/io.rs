@@ -1,13 +1,14 @@
 use std::fs;
 use std::path::Path;
 
+//Se importan las piezas que usará OpenCV
 use opencv::{
     face,
     prelude::*,
     videoio,
     core::Size,
 };
-
+//Verifica que la carpeta de salida exista si no la crea
 use crate::config::OUTPUT_DIRECTORY;
 
 pub fn ensure_output_directory_exists() -> opencv::Result<()> {
@@ -27,7 +28,7 @@ pub fn ensure_output_directory_exists() -> opencv::Result<()> {
 
     Ok(())
 }
-
+//Abre el video de entrada
 pub fn open_input_video(video_path: &str) -> opencv::Result<videoio::VideoCapture> {
     let capture = videoio::VideoCapture::from_file(video_path, videoio::CAP_ANY)?;
 
@@ -43,7 +44,7 @@ pub fn open_input_video(video_path: &str) -> opencv::Result<videoio::VideoCaptur
 
     Ok(capture)
 }
-
+//Carga el clasificador Haar cascade para detección de rostros
 pub fn load_cascade_classifier(
     cascade_path: &str,
 ) -> opencv::Result<opencv::objdetect::CascadeClassifier> {
@@ -57,6 +58,8 @@ pub fn load_cascade_classifier(
     let classifier = opencv::objdetect::CascadeClassifier::new(cascade_path)?;
     Ok(classifier)
 }
+
+//Carga el modelo de Facemark
 
 pub fn load_facemark_model(
     model_path: &str,
@@ -73,7 +76,7 @@ pub fn load_facemark_model(
 
     Ok(facemark)
 }
-
+//Calcula cuantos ms debe esperar entre cada frame para mantener el mismo fps del video de entrada
 pub fn calculate_frame_delay(fps: f64) -> i32 {
     if fps > 0.0 {
         (1000.0 / fps).round() as i32
@@ -81,7 +84,7 @@ pub fn calculate_frame_delay(fps: f64) -> i32 {
         33
     }
 }
-
+//Crea el objeto que guardará el video procesado
 pub fn create_output_writer(
     output_path: &str,
     fps: f64,
